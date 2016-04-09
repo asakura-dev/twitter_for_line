@@ -2,33 +2,40 @@ require 'bundler/setup'
 require 'sinatra/base'
 require 'json'
 require 'rest-client'
+require 'openssl'
+require 'base64'
+require 'twitter'
+
+EVENT_TYPE_OPERATION = "138311609100106403"
+EVENT_TYPE_MESSAGE = "138311609000106303"
 
 class App < Sinatra::Base
   post '/linebot/callback' do
-    params = JSON.parse(request.body.read)
-    
-    params['result'].each do |msg|
-      request_content = {
-        to: [msg['content']['from']],
-        toChannel: 1383378250, # Fixed  value
-        eventType: "138311608800106203",
-        content: msg['content']
-      }
-
-      endpoint_uri = 'https://trialbot-api.line.me/v1/events'
-      content_json = request_content.to_json
-
-      RestClient.proxy = ENV["FIXIE_URL"]
-      RestClient.post(endpoint_uri, content_json, {
-                        'Content-Type' => 'application/json; charset=UTF-8',
-                        'X-Line-ChannelID' => ENV["LINE_CHANNEL_ID"],
-                        'X-Line-ChannelSecret' => ENV["LINE_CHANNEL_SECRET"],
-                        'X-Line-Trusted-User-With-ACL' => ENV["LINE_CHANNEL_MID"],
-                      })
+    request_body = request.body.read
+    if request.env["HTTP_X_LINE_CHANNELSIGNATURE"] != computeSignature(request_body)
+      puts "invalid Signature"
+    else
+      puts "valid Signature"
+      params = JSON.parse(request_body)
+      params['result'].each do |msg|
+        tweet(msg['content']['text'].to_s)
+      end
     end
-
-    "OK"
+  end
+  def computeSignature(request_body)
+    hash = OpenSSL::HMAC::digest(OpenSSL::Digest::SHA256.new,  ENV["LINE_CHANNEL_SECRET"], request_body)
+    signature = Base64.strict_encode64(hash)
+  end
+  def tweet(message)
+    client = Twitter::REST::Client.new do |config|
+      config.consumer_key        = ENV["TWITTER_CONSUMER_KEY"]
+      config.consumer_secret     = ENV["TWITTER_CONSUMER_SECRET_KEY"]
+      config.access_token        = ENV["TWITTER_ACCESS_TOKEN"]
+      config.access_token_secret = ENV["TWITTER_ACCESS_TOKEN_SECRET"]
+    end
+    client.update(message)
   end
 end
+
 
 run App
