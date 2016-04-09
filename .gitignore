@@ -1,0 +1,13 @@
+vendor
+.bundle
+
+/log/*.log
+/tmp
+doc/
+*.swp
+*~
+.secret
+/#*#
+#*#
+*#
+.#*
